@@ -289,20 +289,6 @@ squeue -u $USER
 - **Water Resource Management**: Streamflow and drought analysis
 - **Urban Planning**: Infrastructure design under climate change
 
-## 📚 Citation
-
-If you use this code in your research, please cite:
-
-```bibtex
-@software{dclimba-release_2026,
-  title={dCLIMBA-release: Differentiable Climate Model Bias Adjustment},
-  author={[Kamlesh Sawadekar]},
-  year={2024},
-  url={https://github.com/kasProg/dCLIMBA-release},
-  version={1.0}
-}
-```
-
 ## 🤝 Contributing
 
 Contributions are welcome! Please see our contributing guidelines:
