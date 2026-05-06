@@ -1,0 +1,11 @@
+# @package _global_
+
+# Different sweep configuration - testing different degrees
+clim: ['access_cm2', 'gfdl_esm4', 'ipsl_cm6a_lr', 'miroc6', 'mpi_esm1_2_lr','mri_esm2_0']
+
+degree: [4, 8]
+emph_quantile: [0.5, 0.9]
+
+# Override arguments for this experiment
+temp_enc: 'TCN'
+layers: 2
