@@ -224,6 +224,66 @@ def totalPrecipLoss(pred, target):
     return loss
 
 
+def compute_composite_loss(transformed_x, batch_y, loss_func, device, emph_quantile,
+                            w1=0.99, w2=0.01):
+    """
+    Builds the total training/validation loss from whichever terms are listed
+    in `loss_func`, weighting each with the same fixed w1/w2 scheme used
+    throughout the project. This centralizes the `if 'x' in loss_func: ...`
+    chain that used to be copy-pasted across the train loop, the inline
+    validation block in run_exp.py, and run_val.py.
+
+    Args:
+        transformed_x: (..., T) or (B, P, T) model output.
+        batch_y: same shape as transformed_x, the reference/target series.
+        loss_func: list of loss-term names to include (subset of
+            {'quantile', 'autocorrelation', 'fourier', 'rainy_day',
+             'correlation', 'totalP', 'spatial_correlation'}).
+        device: torch device used for the quantile-loss computation.
+        emph_quantile: quantile (or list of quantiles) to emphasize in the
+            distributional loss; passed through to
+            distributional_loss_interpolated.
+        w1, w2: fixed weights for the quantile term and the secondary terms,
+            matching the values used in run_exp.py/run_val.py.
+
+    Returns:
+        total_loss: scalar tensor, sum of the requested (weighted) terms.
+        components: dict[str, torch.Tensor] of the individual weighted terms
+            that were actually computed, keyed by their loss_func name.
+    """
+    components = {}
+
+    if 'quantile' in loss_func:
+        components['quantile'] = w1 * distributional_loss_interpolated(
+            transformed_x.movedim(-1, 0), batch_y.movedim(-1, 0),
+            device=device, num_quantiles=1000, emph_quantile=emph_quantile)
+
+    if 'autocorrelation' in loss_func:
+        components['autocorrelation'] = w2 * autocorrelation_loss(transformed_x, batch_y)
+
+    if 'fourier' in loss_func:
+        components['fourier'] = w2 * fourier_spectrum_loss(transformed_x, batch_y)
+
+    if 'rainy_day' in loss_func:
+        components['rainy_day'] = w2 * rainy_day_loss(
+            transformed_x.movedim(-1, 0), batch_y.movedim(-1, 0))
+
+    if 'correlation' in loss_func:
+        components['correlation'] = w2 * CorrelationLoss(transformed_x, batch_y)
+
+    if 'totalP' in loss_func:
+        components['totalP'] = 0.0001 * totalPrecipLoss(transformed_x, batch_y)
+
+    if 'spatial_correlation' in loss_func:
+        components['spatial_correlation'] = spatial_correlation_loss(transformed_x, batch_y)
+
+    if not components:
+        raise ValueError(f"No recognized loss terms in loss_func={loss_func!r}")
+
+    total_loss = sum(components.values())
+    return total_loss, components
+
+
 def spatial_correlation_loss(yhat, ytrue, eps=1e-8):
     B,P,T = yhat.shape
     yh = yhat - yhat.mean(dim=1, keepdim=True)

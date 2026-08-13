@@ -3,7 +3,6 @@ import os
 from ibicus.evaluate.metrics import *
 from model.benchmark import BiasCorrectionBenchmark
 import data.helper as helper
-import yaml
 import argparse
 
 ###-----The code is currently accustomed to CMIP6-Livneh/gridmet Data format ----###
@@ -32,10 +31,7 @@ run_id = args.run_id
 validation = args.validation
 base_dir = args.base_dir
 
-run_path = helper.load_run_path(run_id, base_dir=base_dir)
-# Load the config.yaml file
-with open(os.path.join(run_path, 'train_config.yaml'), 'r') as f:
-    config = yaml.safe_load(f)
+run_path, config = helper.load_trial_config(run_id, base_dir=base_dir)
 
 logging = True
 

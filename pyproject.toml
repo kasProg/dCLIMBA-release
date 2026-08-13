@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+# Lets `pytest` run from the repo root resolve imports like
+# `from model.loss import ...` the same way the training/eval scripts do.
+pythonpath = ["."]
+testpaths = ["tests"]

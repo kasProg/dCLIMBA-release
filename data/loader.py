@@ -260,32 +260,6 @@ class DataLoaderWrapper:
         return final_norm_tensor
 
 
-    def get_dataloader(self):
-        """Returns a PyTorch DataLoader."""
-        x = self.x_data.squeeze().T
-        y = self.y_data.squeeze().T
-
-        norm_input = self.input_norm_tensor
-
-        if self.chunk:
-            norm_input, y, x = self.chunk_sequence(norm_input, x, y, chunk_size=self.chunk_size, stride=self.stride)
-        
-
-        dataset = TensorDataset(None, norm_input, x, y)
-        return DataLoader(dataset, batch_size=self.batch_size, shuffle=False)
-    
-    
-    def get_dataloader_future(self):
-        """Returns a PyTorch DataLoader."""
-        x = self.x_data.squeeze().T
-        norm_input = self.input_norm_tensor
-
-        if self.chunk:
-            norm_input, y, x = self.chunk_sequence(norm_input, x, None, chunk_size=self.chunk_size, stride=self.stride)
-
-        dataset = TensorDataset(None, norm_input, x)
-        return DataLoader(dataset, batch_size=self.batch_size, shuffle=False)
-    
     def build_autoregressive_dataset(self, norm_input, k, tv_idx=0, static_idxs=[1, 2, 3, 4]):
         """
         norm_input: (coords, time, features)
@@ -320,24 +294,6 @@ class DataLoaderWrapper:
         X = torch.cat([prcp_stack, static_feat], dim=-1)  # (coords, time, input_dim)
 
         return X
-    
-    def chunk_sequence(self, data, x=None, y=None, chunk_size=365, stride=90):
-        coords, time, features = data.shape
-        chunks, x_chunks, target_chunks = [], [], []
-
-        for start in range(0, time - chunk_size + 1, stride):
-            end = start + chunk_size
-            chunks.append(data[:, start:end, :])  # (coords, chunk_size, features)
-            if y is not None:
-                target_chunks.append(y[:, start:end])  # (coords, chunk_size)
-            if x is not None:
-                x_chunks.append(x[:, start:end])  # (coords, chunk_size)
-
-        data_chunks = torch.cat(chunks, dim=0)  # (coords * n_chunks, chunk_len, features)
-        target_chunks = torch.cat(target_chunks, dim=0) if y is not None else None
-        x_chunks = torch.cat(x_chunks, dim=0) if x is not None else None
-
-        return data_chunks, target_chunks, x_chunks
     
     def add_wet_dry_flag(self, input_tensor, x, threshold=1.0):
         """
@@ -758,101 +714,3 @@ class DataLoaderWrapper:
                     weights[t] = group_weights[g]
 
             return neighbors_idx, distances_km, weights
-
-   
-
-
-   ## THIS FUNCTION IS NOT WORKING PROPERLY YET
-    def reconstruct_from_chunks_and_patches(self, patches_batch, outputs, 
-                                           chunk_size=None, stride=None, 
-                                           total_time=None, N=None, 
-                                           mode='mean'):
-        """
-        Reconstruct full spatial-temporal outputs from chunked and patched data.
-        
-        Args:
-            patches_batch: array-like of shape (B*n_chunks, P) 
-            outputs: torch.Tensor of shape (B*n_chunks, P, chunk_len) or (B*n_chunks*P, chunk_len)
-            chunk_size: temporal chunk length
-            stride: temporal stride between chunks
-            total_time: total number of timesteps
-            N: total number of spatial locations
-            mode: 'mean', 'first', or 'sum'
-            
-        Returns:
-            reconstructed: tensor of shape (N, total_time)
-            counts: tensor of shape (N, total_time)
-        """
-        
-        if chunk_size is None:
-            chunk_size = self.chunk_size
-        if stride is None:
-            stride = self.stride
-        if total_time is None:
-            total_time = self.x_data.shape[0]
-        if N is None:
-            N = self.valid_coords.shape[0]
-            
-        # Normalize inputs
-        if isinstance(patches_batch, torch.Tensor):
-            patches_np = patches_batch.cpu().numpy()
-        else:
-            patches_np = np.asarray(patches_batch)
-            
-        if isinstance(outputs, torch.Tensor):
-            outputs = outputs.cpu()
-        else:
-            outputs = torch.tensor(outputs)
-            
-        # Handle different output shapes
-        if outputs.dim() == 3:  # (B*n_chunks, P, chunk_len)
-            B_chunks, P, chunk_len = outputs.shape
-            outputs_flat = outputs.reshape(-1, chunk_len)  # (B*n_chunks*P, chunk_len)
-        elif outputs.dim() == 2:  # (B*n_chunks*P, chunk_len)
-            outputs_flat = outputs
-            chunk_len = outputs.shape[1]
-        else:
-            raise ValueError(f"Expected outputs shape (B*n_chunks, P, chunk_len) or (B*n_chunks*P, chunk_len), got {outputs.shape}")
-            
-        # Compute chunk starts
-        starts = list(range(0, total_time - chunk_size + 1, stride))
-        if (total_time - chunk_size) % stride != 0:
-            starts.append(total_time - chunk_size)
-        n_chunks = len(starts)
-        
-        # Verify patches shape
-        if patches_np.ndim != 2:
-            raise ValueError(f"patches_batch must be (B*n_chunks, P), got {patches_np.shape}")
-        
-        B_total, P = patches_np.shape
-        B = B_total // n_chunks
-        
-        # Initialize reconstruction
-        reconstructed = torch.zeros(N, total_time)
-        counts = torch.zeros(N, total_time, dtype=torch.int32)
-        
-        # Reconstruct
-        for b in range(B):
-            for c_idx, t_start in enumerate(starts):
-                t_end = t_start + chunk_len
-                batch_chunk_idx = b * n_chunks + c_idx
-                
-                for p in range(P):
-                    spatial_idx = int(patches_np[batch_chunk_idx, p])
-                    flat_idx = batch_chunk_idx * P + p
-                    
-                    # Add prediction
-                    reconstructed[spatial_idx, t_start:t_end] += outputs_flat[flat_idx]
-                    counts[spatial_idx, t_start:t_end] += 1
-        
-        # Aggregate
-        if mode == 'mean':
-            counts_f = counts.clamp(min=1).to(dtype=reconstructed.dtype)
-            reconstructed = reconstructed / counts_f
-        elif mode == 'first':
-            mask = counts > 0
-            reconstructed = torch.where(mask, reconstructed / counts.clamp(min=1), reconstructed)
-        elif mode != 'sum':
-            raise ValueError(f"Unknown mode {mode}")
-            
-        return reconstructed, counts

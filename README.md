@@ -39,13 +39,9 @@ Climate models produce valuable projections but at spatial resolutions (25-100km
 ### Environment Setup
 
 ```bash
-# Clone the repository
-git clone https://github.com/kasProg/dCLIMBA-release.git
-cd dCLIMBA-release
-
 # Create conda environment
-conda env create -f env.yml
-conda activate dCLIMAD
+conda env create -f env.yaml
+conda activate dCLIMBA
 ```
 
 ### Key Dependencies
@@ -107,9 +103,6 @@ python launcher.py sweep=conv1d
 
 # Override sweep parameters
 python launcher.py sweep=conv1d clim=access_cm2 epochs=200
-
-# Dry run to see what would be executed
-python launcher.py sweep=lstm dry_run=true
 ```
 
 #### SLURM Batch Jobs
@@ -124,10 +117,22 @@ squeue -u $USER
 ### 3. Evaluation
 
 #### Auto hyperparameter sweep and testing
-# Select base experiment in run_model_selector.sh (for validation tuning) and in auto_val.sh (for testing and triggering validation)
+Set `BASE_DIR` to point both scripts at the same experiment tree. Set `TEST_PERIOD` to control the test years. Set `SPATIAL_EXTENT` when you want a spatial subset instead of the full-domain test.
 ```bash
-# sweep testing run and giving the best results based on hyperparamters selected from validation
+# Default test period
 ./auto_eval.sh
+
+# Use a custom experiment tree
+BASE_DIR=/outputs/Final_repeat_nowghtdecay_5b/jobs_LOCAspatioTempConv1d ./auto_eval.sh
+
+# Override the test period
+TEST_PERIOD=1995,2010 ./auto_eval.sh
+
+# Run a spatial test instead of the default full-domain test
+SPATIAL_EXTENT="05" ./auto_eval.sh
+
+# Combine both overrides if needed
+BASE_DIR=/outputs/Final_repeat_nowghtdecay_5b/jobs_LOCAspatioTempConv1d TEST_PERIOD=1995,2010 SPATIAL_EXTENT="05" ./auto_eval.sh
 ```
 
 #### Single Model Validation (However validation is already done during training)
@@ -149,12 +154,16 @@ RUN_IN_BACKGROUND=true ./run_val_batch.sh outputs/experiment_name/ 1965,1978
 ```
 
 #### Model Selection and Ranking
+`run_model_selector.sh` reads the same `BASE_DIR` value as `auto_eval.sh`, so both scripts stay on the same output tree.
 ```bash
 # Rank all models by performance metrics
 python run_model_selector.py --exp_root outputs/experiment_name/
 
 # Use specific validation period for ranking
 python run_model_selector.py --exp_root outputs/experiment_name/ --val_period 1965,1978
+
+# Run a spatial selection pass instead of time-based validation
+python run_model_selector.py --exp_root outputs/experiment_name/ --spatial_extent "['05']"
 
 # Save results to custom files
 python run_model_selector.py --exp_root outputs/experiment_name/ \
@@ -278,6 +287,9 @@ tensorboard --logdir runs/
 # Monitor GPU usage during training
 ./auto_eval.sh
 
+# Example with overrides
+TEST_PERIOD=1995,2010 SPATIAL_EXTENT="05" ./auto_eval.sh
+
 # Check job status
 squeue -u $USER
 ```
@@ -288,6 +300,21 @@ squeue -u $USER
 - **Agricultural Planning**: Crop modeling with bias-corrected climate data  
 - **Water Resource Management**: Streamflow and drought analysis
 - **Urban Planning**: Infrastructure design under climate change
+
+## 🧪 Development
+
+`tests/` covers the pure-logic modules (loss functions, model shape/monotonicity
+contracts, normalization round-trips, climate indices, model-selector scoring) with
+`pytest` — no GPU or real climate data required:
+
+```bash
+pip install pytest
+pytest tests/ -v
+```
+
+These run automatically on push/PR via `.github/workflows/tests.yml`. They're a
+regression check on plumbing, not a substitute for smoke-testing `run_exp.py`/
+`eval_exp.py` against real data.
 
 ## 🤝 Contributing
 

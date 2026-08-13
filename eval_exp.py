@@ -1,23 +1,11 @@
 import torch
-import torch.optim as optim
-import torch.nn as nn
-import matplotlib.pyplot as plt
-import xarray as xr
 from torch.utils.tensorboard import SummaryWriter
 import os
-import pandas as pd
-import numpy as np
-from model.model import QuantileMappingModel, SpatioTemporalQM
-from model.loss import rainy_day_loss, distributional_loss_interpolated, compare_distributions, rmse, kl_divergence_loss, wasserstein_distance_loss, trend_loss
-import data.process as process
-from sklearn.preprocessing import StandardScaler
-from ibicus.evaluate import assumptions, correlation, marginal, multivariate, trend
-from ibicus.evaluate.metrics import *
+from model.build import build_model, load_checkpoint
+from model.loss import distributional_loss_interpolated, compare_distributions
 from data.loader import DataLoaderWrapper
-from model.benchmark import BiasCorrectionBenchmark
 import data.valid_crd as valid_crd
 import data.helper as helper
-import yaml
 import argparse
 
 ###-----The code is currently accustomed to CMIP6-Livneh/gridmet Data format ----###
@@ -57,11 +45,8 @@ testepoch = args.testepoch
 validation = args.validation
 base_dir = args.base_dir
 
-run_path = helper.load_run_path(run_id, base_dir=base_dir)
+run_path, config = helper.load_trial_config(run_id, base_dir=base_dir)
 print(run_path)
-# Load the config.yaml file
-with open(os.path.join(run_path, 'train_config.yaml'), 'r') as f:
-    config = yaml.safe_load(f)
 
 logging = True
 
@@ -87,7 +72,7 @@ clim = config['clim']
 ref = config['ref']
 train = False
 
-input_x = {'precipitation': ['pr', 'prec', 'prcp' 'PRCP', 'precipitation']}
+input_x = {'precipitation': ['pr', 'prec', 'prcp', 'PRCP', 'precipitation']}
 clim_var = 'pr'
 ref_var = config['ref_var']
 
@@ -126,9 +111,7 @@ lag = config['lag']
 wet_dry_flag = config['wet_dry_flag']
 # pca_mode = config['pca_mode']
 logging_path = config['logging_path']
-hidden_size = config['hidden_size']
 neighbors = config['neighbors'] if 'neighbors' in config else 16
-n_harmonics = config['n_harmonics'] if 'n_harmonics' in config else 0
 
 
 # ny = 4 # number of params
@@ -187,32 +170,10 @@ if wet_dry_flag:
     nx += 1  
 
 
-model = SpatioTemporalQM(f_in=nx, f_model=hidden_size, heads=2, t_blocks=layers, st_layers=1, degree=degree, dropout=0.1, transform_type=transform_type, temp_enc=temp_enc, n_harmonics=n_harmonics).to(device)
+model = build_model(config, nx=nx, device=device)
 
-
-model_path = f'{model_save_path}/model_{testepoch}.pth'    
-ckpt = torch.load(model_path, map_location=device)
-
-# Extract state dict, handling both formats
-try:
-    state_dict = ckpt['model_state']
-except KeyError:
-    state_dict = ckpt
-
-# Try loading first
-try:
-    model.load_state_dict(state_dict, strict=False)
-except RuntimeError as e:
-    # Handle renamed parameters (to_params -> to_coeffs)
-    if 'to_params.weight' in state_dict and 'to_coeffs.weight' not in state_dict:
-        state_dict['to_coeffs.weight'] = state_dict.pop('to_params.weight')
-        state_dict['to_coeffs.bias'] = state_dict.pop('to_params.bias')
-        print("Remapped 'to_params' -> 'to_coeffs' for compatibility")
-        model.load_state_dict(state_dict, strict=False)
-    else:
-        raise
-# optimizer.load_state_dict(ckpt["optimizer_state"])
-# start_epoch = ckpt["epoch"]
+model_path = f'{model_save_path}/model_{testepoch}.pth'
+load_checkpoint(model, model_path, device=device)
 
 model.eval()
 transformed_x = []

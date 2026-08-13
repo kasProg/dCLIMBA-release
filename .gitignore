@@ -1,2 +1,15 @@
 outputs
 processed_elev_attributes
+
+# Large/regenerable data & benchmark trees (mirrors the existing `outputs`
+# exclusion above -- these are archived separately, not via git).
+processed_data/
+benchmark/
+
+# Python bytecode/caches
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Editor-local settings
+.vscode/

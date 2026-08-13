@@ -1,5 +1,13 @@
 # Main configuration file with all default values
 
+# Keep training outputs in the project tree instead of Hydra's run directory.
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: ${save_path}
+  output_subdir: null
+
 # Which sweep config to use by default
 defaults:
   - sweep: conv1d
@@ -17,8 +25,8 @@ epochs: 100
 
 
 # ============ Data Paths ============
-cmip_dir: #cmip6_dir'cmip6'
-ref_dir: #unsplit_livneh_dir
+cmip_dir: processed_data/cmip6 #cmip6_dir'cmip6'
+ref_dir: processed_data/Livneh/unsplit #unsplit_livneh_dir
 ref: 'livneh'
 ref_var: 'prec'
 input_attrs: 'elev;slope;aspect;landcover'
@@ -60,14 +68,14 @@ logging: true
 
 # ============ Spatial Settings ============
 spatial_test: false
-shapefile_filter_path: #need huc2 shapefile path
+shapefile_filter_path: processed_data/shapefiles/us_huc/contents/WBDHU2.shp
 spatial_extent: ['01', '02', '03', '04', '06', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18']
 spatial_extent_val: ['07'] #Upper Mississippi region for validation in spatial test
 spatial_extent_test: ['05'] #Ohio region for testing in spatial test
 
 # ============ Output Paths ============
-save_path: 'outputs/Final_repeat_nowghtdecay_5b_nolag' #Final Repeat
-logging_path: 'runs/Final_repeat_nowghtdecay_5b_nolag' #Final Repeat
+save_path: 'outputs/test'
+logging_path: 'runs/test'
 # ============ GPU Settings ============
 available_gpus: [0, 1, 2, 3]
 

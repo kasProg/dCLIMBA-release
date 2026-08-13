@@ -262,6 +262,23 @@ def generate_run_id(args_dict):
     run_hash = hashlib.md5(config_str.encode()).hexdigest()[:8]  # Short, 8-char hash
     return run_hash
 
+def load_trial_config(run_id, base_dir):
+    """
+    Resolves a run_id to its trial directory and loads its saved
+    train_config.yaml. Centralizes the `load_run_path(...)` +
+    `yaml.safe_load(open(.../train_config.yaml))` pattern that used to be
+    duplicated in eval_exp.py, run_val.py, and benchmarking.py.
+
+    Returns:
+        run_path: str, the resolved trial directory.
+        config: dict, the parsed train_config.yaml contents.
+    """
+    run_path = load_run_path(run_id, base_dir=base_dir)
+    with open(os.path.join(run_path, 'train_config.yaml'), 'r') as f:
+        config = yaml.safe_load(f)
+    return run_path, config
+
+
 def load_run_path(run_id, base_dir='/pscratch/sd/k/kas7897/diffDownscale/jobs/'):
     # Find path for run_id
     # pattern = os.path.join(base_dir, '*','*', f'*{run_id}*')  # Wildcard to match structure

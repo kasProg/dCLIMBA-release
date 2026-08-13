@@ -8,7 +8,6 @@ import math
 import torch.nn.functional as F
 # from lstm import CudnnLstmModels
 # from fno import FNO2d, FNO1d
-from .tcn import TemporalTCN
 import pandas as pd
 import numpy as np
 
@@ -245,7 +244,7 @@ class STBlock(nn.Module):
         if self.tempModel == 'Conv1d':
             self.tenc = TemporalConv1d(dim, hidden=t_hidden, n_blocks=t_blocks, dropout=dropout)
         elif self.tempModel == 'TCN':
-            self.tenc = TemporalTCN(dim, hidden=t_hidden, n_blocks=t_blocks, dropout=dropout)
+            self.tenc = TemporalConv1d(dim, hidden=t_hidden, n_blocks=t_blocks, dropout=dropout)
         elif self.tempModel == 'LSTM':
             self.tenc = nn.LSTM(input_size=dim, hidden_size=dim, num_layers=t_blocks, dropout=dropout, batch_first=True)
         elif self.tempModel == 'MLP':

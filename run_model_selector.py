@@ -327,9 +327,16 @@ def scan_and_rank(root: str, val_period: Optional[str] = None, spatial_extent: O
             start_year, end_year = val_period.split(',')
             val_folder = f"{start_year.strip()}_{end_year.strip()}"
         else:
-            val_folder = f"{spatial_extent}"
+            val_folder = f"['{spatial_extent}']"
+
+        alt_val_folder = None
+        if spatial_extent and not val_period:
+            alt_val_folder = spatial_extent
             
         if (trial / val_folder / VAL_LOG).exists():
+            has_val_log = True
+
+        if not has_val_log and alt_val_folder and (trial / alt_val_folder / VAL_LOG).exists():
             has_val_log = True
 
         if not has_val_log and (trial / VAL_LOG).exists():
