@@ -13,3 +13,7 @@ __pycache__/
 
 # Editor-local settings
 .vscode/
+
+# Zenodo-archive-only README (frozen snapshot doc for the data deposit,
+# not the GitHub-facing README) -- kept locally, not in this repo.
+README_2.md
