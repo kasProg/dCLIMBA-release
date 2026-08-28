@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="/pscratch/sd/k/kas7897/dCLIMBA-release" # your code root directory
-BASE_DIR="${BASE_DIR:-$ROOT/outputs/Final_repeat_nowghtdecay_5b/jobs_LOCAspatioTempConv1d}"
+BASE_DIR="${BASE_DIR:-$ROOT/outputs/test/jobs_LOCAspatioTempConv1d}"
 VAL_PERIOD="${VAL_PERIOD:-1965,1978}"
 TEST_PERIOD="${TEST_PERIOD:-2001,2014}"
 SPATIAL_EXTENT="${SPATIAL_EXTENT:-}"
