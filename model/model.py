@@ -8,7 +8,7 @@ import math
 import torch.nn.functional as F
 # from lstm import CudnnLstmModels
 # from fno import FNO2d, FNO1d
-from .tcn import TemporalTCN
+# from .tcn import TemporalTCN
 import pandas as pd
 import numpy as np
 
@@ -85,6 +85,7 @@ class SpatioTemporalQM(nn.Module):
         temp_enc="Conv1d",
         n_harmonics=2,               # number of Fourier harmonics
         enforce_nonneg=True,         # final ReLU on yhat
+        spatial_attn=True,           # set False for a temporal-encoder-only ablation
     ):
         super().__init__()
 
@@ -94,6 +95,7 @@ class SpatioTemporalQM(nn.Module):
         self.transform_type = transform_type
         self.enforce_nonneg = enforce_nonneg
         self.n_harmonics = n_harmonics
+        self.spatial_attn = spatial_attn
 
         # Input embedding
         self.embed = nn.Linear(f_in, f_model)
@@ -107,6 +109,7 @@ class SpatioTemporalQM(nn.Module):
                 t_blocks=t_blocks,
                 dropout=dropout,
                 tempModel=temp_enc,
+                spatial_attn=spatial_attn,
             )
             for _ in range(st_layers)
         ])
@@ -115,9 +118,16 @@ class SpatioTemporalQM(nn.Module):
         if self.transform_type == "monotone":
             # alpha, c, (w_k, s_k, b_k) for k = 1..degree
             self.ny = 2 + 3 * degree
-        else:
+        elif self.transform_type == "poly":
             # polynomial: sum_{i=1..degree} a_i x^i + b
             self.ny = degree + 1
+        elif self.transform_type == "direct":
+            # Direct regression head: the network predicts the corrected
+            # precipitation value itself, with no parametric transform of
+            # x_target (and no monotonicity/order-preservation guarantee).
+            self.ny = 1
+        else:
+            raise ValueError(f"Unknown transform_type: {self.transform_type}")
 
         if n_harmonics ==0 :
             self.to_coeffs = nn.Linear(f_model, self.ny)
@@ -209,6 +219,12 @@ class SpatioTemporalQM(nn.Module):
         # Apply transform
         if self.transform_type == "monotone":
             yhat = self.monotone(x_target, params)  # (B, P, T)
+        elif self.transform_type == "direct":
+            # Network output IS the corrected precipitation value; x_target
+            # is not used here (it's still available to the network as one
+            # of the input features in `inps`, just not as the thing being
+            # transformed).
+            yhat = params.squeeze(-1)  # (B, P, T, 1) -> (B, P, T)
         else:
             # Polynomial branch:
             # params: (..., ny) = [a1..a_degree, b]
@@ -238,14 +254,15 @@ class STBlock(nn.Module):
     Interleaved Spatio-Temporal Block:
       x -> TemporalConv1d -> SpatialAttention -> (residuals + norm)
     """
-    def __init__(self, dim, heads=4, t_hidden=128, t_blocks=3, dropout=0.1, tempModel='Conv1d'):
+    def __init__(self, dim, heads=4, t_hidden=128, t_blocks=3, dropout=0.1, tempModel='Conv1d', spatial_attn=True):
         super().__init__()
 
         self.tempModel = tempModel
+        self.spatial_attn = spatial_attn
         if self.tempModel == 'Conv1d':
             self.tenc = TemporalConv1d(dim, hidden=t_hidden, n_blocks=t_blocks, dropout=dropout)
-        elif self.tempModel == 'TCN':
-            self.tenc = TemporalTCN(dim, hidden=t_hidden, n_blocks=t_blocks, dropout=dropout)
+        # elif self.tempModel == 'TCN':
+        #     self.tenc = TemporalTCN(dim, hidden=t_hidden, n_blocks=t_blocks, dropout=dropout)
         elif self.tempModel == 'LSTM':
             self.tenc = nn.LSTM(input_size=dim, hidden_size=dim, num_layers=t_blocks, dropout=dropout, batch_first=True)
         elif self.tempModel == 'MLP':
@@ -261,9 +278,10 @@ class STBlock(nn.Module):
         else:
             raise ValueError(f"Unknown tempModel type: {self.tempModel}")
         
-        self.sattn = PatchSpatialAttention(dim, n_heads=heads, ff_mult=2, dropout=dropout)
+        if self.spatial_attn:
+            self.sattn = PatchSpatialAttention(dim, n_heads=heads, ff_mult=2, dropout=dropout)
+            self.n2 = nn.LayerNorm(dim)
         self.n1 = nn.LayerNorm(dim)
-        self.n2 = nn.LayerNorm(dim)
 
     def forward(self, x, pos):            # x: (B,P,T,F); pos: (B,P,2)
         B, P, T, F_ = x.size()
@@ -287,8 +305,10 @@ class STBlock(nn.Module):
         else:
             y = self.tenc(self.n1(x)) + x     # temporal residual
 
-       
-        z = self.sattn(self.n2(y), pos)   # spatial attn (already residual inside)
+        if self.spatial_attn:
+            z = self.sattn(self.n2(y), pos)   # spatial attn (already residual inside)
+        else:
+            z = y   # temporal-encoder-only ablation: no cross-location mixing
         return z
 
 

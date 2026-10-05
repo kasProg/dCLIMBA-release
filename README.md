@@ -3,322 +3,208 @@
 [![Python 3.10](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/release/python-3100/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.4.1-EE4C2C.svg?style=flat&logo=pytorch)](https://pytorch.org)
 
-A differentiable framework for climate model bias adjustment. This project combines advanced neural architectures with domain-specific climate science knowledge to produce bias-corrected precipitation data from coarse-resolution climate model outputs.
+A differentiable framework for climate model bias adjustment. dCLIMBA combines
+neural architectures with domain-specific climate science knowledge to produce
+bias-corrected precipitation from coarse-resolution climate model outputs.
 
-NOTE 1: This code currently only does bias correction, the downscaling model will be available soon! 
+> **Manuscript.** Sawadekar, K., McGinnis, S., Li, P., Lawson, K., & Shen, C.
+> *A Differentiable Framework for General Circulation Model Precipitation Bias Correction.*
+> [arXiv:2604.23045v3]
+>
+> The frozen code, processed input data and model outputs used for the manuscript are
+> archived on Zenodo: **DOI: _to be added_**. This GitHub repository contains the code only.
 
-NOTE 2: The manuscript for this work is under review in GMD 📜 
+> **NOTE:** This release performs bias *correction* only. The downscaling component
+> is not included in this version.
 
-## 🌍 Overview
+## Overview
 
-Climate models produce valuable projections but at spatial resolutions (25-100km) too coarse for many impact studies. **dCLIMBA** addresses this challenge by:
+Climate models produce valuable projections but at spatial resolutions (~25–100 km)
+too coarse for many impact studies. **dCLIMBA** addresses this by:
 
-- **Bias Adjustment**: Corrects systematic biases in climate model outputs using physically-informed transformations
-- **Spatial-Temporal Modeling**: Leverages spatial correlations and temporal patterns for enhanced accuracy
-- **Multi-Model Support**: Works with CMIP6 climate models and observational datasets (Livneh, GridMET)
+- **Bias adjustment**: corrects systematic biases in climate-model output using a
+  physically-informed, monotonic parametric transformation.
+- **Spatial–temporal modeling**: leverages spatial correlations and temporal patterns.
+- **Multi-model support**: works with CMIP6 climate models against a gridded
+  observational reference (unsplit-Livneh).
 
-## 🏗️ Architecture
+### Core model
 
-### Core Models
+**SpatioTemporalQM** ([model/model.py](model/model.py)):
+- Temporal encoder (Conv1D in the paper; LSTM, MLP and Transformer also available)
+- Spatial attention over LOCA-style seasonal neighbors, with geographic relative-position bias
+- Monotone-basis transformation of the raw GCM precipitation (order-preserving, non-negative)
 
-**SpatioTemporalQM**: Advanced neural architecture with:
-   - Temporal encoders (Conv1D, LSTM, Transformer)
-   - Spatial attention with geographic awareness
-   - Monotone-basis transformations for adjusting biases
-
-
-### Key Features
-
-- **Monotone Mapping**: Preserves precipitation order relationships
-- **Seasonal Neighbors**: LOCA-style spatial correlation modeling
-- **Multi-Scale Processing**: Daily to seasonal temporal patterns
-- **Physical Constraints**: Non-negative precipitation with trace thresholds
-
-## 📋 Requirements
-
-### Environment Setup
+## Requirements
 
 ```bash
-# Clone the repository
 git clone https://github.com/kasProg/dCLIMBA-release.git
 cd dCLIMBA-release
-
-# Create conda environment
-conda env create -f env.yml
+conda env create -f env.yaml
 conda activate dCLIMAD
 ```
 
-### Key Dependencies
+The pinned environment (`env.yaml`) installs PyTorch 2.4.1 built against CUDA 11.8. Make sure
+your driver supports CUDA 11.8, or swap the pin for a build matching your hardware.
 
-- **Deep Learning**: PyTorch 2.4.1, CUDA 11.8
-- **Climate Data**: xarray, netCDF4, rasterio
-- **Geospatial**: geopandas, rioxarray, pyproj
-- **Scientific**: numpy, scipy, scikit-learn
-- **Hydra**: Configuration management
-- **Ibicus**: Climate evaluation metrics
+Key dependencies: PyTorch, xarray, netCDF4, geopandas, rioxarray, numpy, scipy,
+scikit-learn, Hydra, ibicus.
 
-## 🚀 Quick Start
+## Data
+
+Download the processed data from the Zenodo record and place it in the repository root,
+so the paths in [configs/config.yaml](configs/config.yaml) resolve:
+
+```
+processed_data/
+├── cmip6/<gcm>/historical/precipitation/clipped_US.nc     # CMIP6 historical precipitation (CONUS)
+├── cmip6/<gcm>/ssp5_8_5/precipitation/clipped_US.nc       # CMIP6 SSP5-8.5 precipitation
+├── cmip6/<gcm>/{elev,slope,aspect,landcover}.nc           # static attributes on the GCM grid
+├── Livneh/unsplit/prec/<gcm>/prec.YYYY.nc                 # unsplit-Livneh, regridded to each GCM grid
+└── shapefiles/{conus,us_huc}/                             # CONUS boundary and HUC2 basins
+```
+
+GCMs: `access_cm2`, `gfdl_esm4`, `ipsl_cm6a_lr`, `miroc6`, `mpi_esm1_2_lr`, `mri_esm2_0`.
+To regenerate the processed data from the raw sources, see [download_scripts/](download_scripts/)
+and the preprocessing scripts in [data/](data/).
+
+To reproduce the paper figures without retraining, also download `outputs/` and `benchmark/`
+from the Zenodo record into the repository root.
+
+## Usage
 
 ### 1. Configuration
 
-The project uses **Hydra** configuration management with sweep configs. Main configuration structure:
+[Hydra](https://hydra.cc) configuration. [configs/config.yaml](configs/config.yaml) holds the
+defaults used in the paper; the sweep files define the hyperparameter grid:
 
 ```
 configs/
-├── config.yaml          # Main config with defaults
-└── sweep/               # Hyperparameter sweep configurations
-    ├── conv1d.yaml      # Conv1D temporal encoder experiments
-    ├── lstm.yaml        # LSTM-based experiments  
-    └── mlp.yaml         # MLP-based experiments
+├── config.yaml          # Main config (paper defaults)
+└── sweep/
+    ├── conv1d.yaml      # Conv1D temporal encoder (paper)
+    ├── lstm.yaml        # LSTM temporal encoder
+    └── mlp.yaml         # MLP temporal encoder
 ```
 
-Example sweep configuration (`configs/sweep/conv1d.yaml`):
+`configs/sweep/conv1d.yaml`:
 ```yaml
 # @package _global_
 clim: ['access_cm2', 'gfdl_esm4', 'ipsl_cm6a_lr', 'miroc6', 'mpi_esm1_2_lr','mri_esm2_0']
-degree: [8, 10]
+degree: [8]
 emph_quantile: [0.5, 0.9]
 temp_enc: 'Conv1d'
-epochs: 500
 layers: 2
 ```
 
 ### 2. Training
 
-#### Single Experiment
 ```bash
-# Using default sweep config (conv1d)
-python run_exp.py
-
-# Using specific sweep config
-python run_exp.py sweep=conv1d
-
-# Override individual parameters
-python run_exp.py sweep=conv1d clim=access_cm2 epochs=100 degree=8 emph_quantile=0.5
-```
-
-#### Hyperparameter Sweeps
-```bash
-# Launch sweep with automatic GPU management
-python launcher.py
-
-# Use specific sweep configuration
+# Sweep over all combinations in the sweep config, one job per free GPU
 python launcher.py sweep=conv1d
 
-# Override sweep parameters
-python launcher.py sweep=conv1d clim=access_cm2 epochs=200
-
-# Dry run to see what would be executed
-python launcher.py sweep=lstm dry_run=true
+# Single run
+python run_exp.py sweep=conv1d clim=access_cm2 degree=8 emph_quantile=0.9
 ```
 
-#### SLURM Batch Jobs
+Each run is saved to `<save_path>/jobs_LOCAspatioTemp<temp_enc>/<gcm>-livneh/<config>/<run_id>_<train_start>_<train_end>/`
+with a checkpoint every 10 epochs, `train_config.yaml`, `statDict.json` (normalization
+statistics), and validation metrics (`<val_start>_<val_end>/val_metrics.jsonl`).
+
+### 3. Model selection and testing
+
 ```bash
-# Submit to SLURM queue
-sbatch slurm1.sbatch
-
-# Monitor job status
-squeue -u $USER
-```
-
-### 3. Evaluation
-
-#### Auto hyperparameter sweep and testing
-# Select base experiment in run_model_selector.sh (for validation tuning) and in auto_val.sh (for testing and triggering validation)
-```bash
-# sweep testing run and giving the best results based on hyperparamters selected from validation
+# Temporal test: select the best run/epoch per GCM on 1965-1978, test on 2001-2014
 ./auto_eval.sh
+
+# Spatial test: select on the Upper Mississippi (HUC 07), test on the Ohio (HUC 05), 1990-2014
+SPATIAL=true ./auto_eval.sh
+
+# Overrides
+BASE_DIR=outputs/<exp>/jobs_LOCAspatioTempConv1d TEST_PERIOD=1995,2010 ./auto_eval.sh
 ```
 
-#### Single Model Validation (However validation is already done during training)
+`auto_eval.sh` runs `run_model_selector.sh` (ranks every run and epoch from its validation
+log) and then `eval_exp.py` on the best checkpoint of each GCM. Corrected precipitation is
+written to `<run>/<start>_<end>/ep<epoch>/xt.pt` and `xt.nc` (`<run>/['05']/ep<epoch>/` for the spatial test), and the SSP5-8.5 projection to
+`<run>/ssp5_8_5_2015_2099/xt.pt`.
+
+Individual steps:
 ```bash
-# Validate specific model run
-python run_val.py --run_id <run_id> --base_dir outputs/ 
+# Re-validate every checkpoint of a run (e.g. after a metrics change)
+python run_val.py --run_path <run_dir> [--val_period 1965,1978]
+./run_val_batch.sh outputs/<exp>          # all runs of an experiment, from a GPU node
 
-# Validate with specific validation period
-python run_val.py --run_id <run_id> --base_dir outputs/ --val_period 1965,1978
+# Rank runs of one GCM
+python run_model_selector.py --exp_root outputs/<exp>/jobs_LOCAspatioTempConv1d/<gcm>-livneh --val_period 1965,1978
+
+# Test one run
+python eval_exp.py --run_id <run_id> --testepoch <epoch> --base_dir outputs/<exp> --test_period 2001,2014
 ```
 
-#### Batch Validation
+### 4. Benchmarks
+
+Statistical baselines (Quantile Mapping, ISIMIP, ECDFM, Quantile Delta Mapping, via
+[ibicus](https://github.com/ecmwf-projects/ibicus)), written to `benchmark/<method>/conus/<gcm>-livneh/`:
+
 ```bash
-# Validate all models in directory
-./run_val_batch.sh outputs/experiment_name/ 1965,1978
-
-# Run in background mode
-RUN_IN_BACKGROUND=true ./run_val_batch.sh outputs/experiment_name/ 1965,1978
+./benchmark.sh
 ```
 
-#### Model Selection and Ranking
-```bash
-# Rank all models by performance metrics
-python run_model_selector.py --exp_root outputs/experiment_name/
+## Reproducing the paper
 
-# Use specific validation period for ranking
-python run_model_selector.py --exp_root outputs/experiment_name/ --val_period 1965,1978
+| Manuscript item | How to reproduce |
+|-----------------|------------------|
+| Training (all 6 GCMs), temporal test | `python launcher.py sweep=conv1d` |
+| Training (all 6 GCMs), spatial test | set `save_path`/`logging_path` in `configs/config.yaml` to `outputs/spatial_Adam_harmonic0`, then `python launcher.py sweep=conv1d spatial_test=true train_start=1990 train_end=2014 val_start=1990 val_end=2014 batch_size=2 learning_rate=1e-3` |
+| Testing (all 6 GCMs), temporal test | `./auto_eval.sh` |
+| Testing (all 6 GCMs), spatial test | `SPATIAL=true ./auto_eval.sh` |
+| Benchmarks | `./benchmark.sh` |
+| Fig. 3 (quantile comparison), Figs. 4–5 (ETCCDI bias), Fig. 6 (fractal dimension) | [analysis_notebooks/analysis_ensemble.ipynb](analysis_notebooks/analysis_ensemble.ipynb) |
+| Fig. 7 (trend preservation, GFDL-ESM4 SSP5-8.5) | [analysis_notebooks/analysis_future.ipynb](analysis_notebooks/analysis_future.ipynb) |
+| Fig. 8 (data-scarce / Ohio holdout) | [analysis_notebooks/analysis_spatial.ipynb](analysis_notebooks/analysis_spatial.ipynb) |
 
-# Save results to custom files
-python run_model_selector.py --exp_root outputs/experiment_name/ \
-    --out_csv my_results.csv --out_json my_best_model.json
-```
-
-## 📁 Project Structure
+## Project structure
 
 ```
 dCLIMBA-release/
 ├── model/
-│   ├── model.py           # Neural network architectures
-│   └── loss.py            # Climate-specific loss functions
+│   ├── model.py              # SpatioTemporalQM and building blocks
+│   ├── loss.py               # Distributional, rainy-day and spatial-correlation losses
+│   └── benchmark.py          # ibicus baseline wrapper
 ├── data/
-│   ├── loader.py          # Advanced data loading with spatial patches
-│   ├── helper.py          # Utility functions and time processing
-│   └── process.py         # Data preprocessing and normalization
+│   ├── loader.py             # Data loading, seasonal neighbors, spatial patches
+│   ├── process.py            # Normalization and reference loading
+│   ├── helper.py             # Units, time labels, run lookup
+│   ├── valid_crd.py          # Valid grid cells, HUC filtering, NetCDF reconstruction
+│   └── *.py                  # Preprocessing (clipping, coarsening, attributes)
+├── download_scripts/         # Raw data download (CMIP6, Livneh, LOCA2)
 ├── eval/
-│   └── metrics.py         # Climate evaluation metrics
-├── config_files/         # Hydra configuration files
-├── outputs/              # Model outputs and checkpoints
-├── runs/                 # TensorBoard logging
-├── slurm/               # HPC batch scripts
-├── launcher.py          # Hyperparameter sweep orchestration
-├── run_exp.py          # Single experiment training
-├── run_val.py          # Model validation
-└── benchmarking.py     # Baseline comparisons
+│   ├── metrics.py            # ETCCDI indices and evaluation metrics
+│   └── plot.py               # Plotting helpers
+├── configs/                  # Hydra configuration
+├── analysis_notebooks/       # Paper figures
+├── launcher.py               # Hyperparameter sweep across GPUs
+├── run_exp.py                # Training (with inline validation)
+├── run_val.py, run_val_batch.sh            # Re-validation of saved checkpoints
+├── run_model_selector.py, run_model_selector.sh  # Run/epoch selection
+├── eval_exp.py, auto_eval.sh               # Testing
+└── benchmarking.py, benchmark.sh           # Statistical baselines
 ```
 
-## 🔬 Scientific Features
+## Contact
 
-### Climate-Aware Design
+- Kamlesh Sawadekar — kas7897@psu.edu
+- Corresponding author — Chaopeng Shen (cshen@engr.psu.edu)
+- Issues: [GitHub Issues](https://github.com/kasProg/dCLIMBA-release/issues)
 
-- **Trace Precipitation**: Handles values < 0.254mm appropriately
-- **Seasonal Correlations**: Uses time-varying spatial neighbor selection
-- **Physical Constraints**: Monotonic transformations preserve order relationships
-- **Multi-Scale Temporal**: Processes daily, monthly, and seasonal patterns
-
-### Spatial Processing
-
-- **Haversine Distance**: Geographic distance calculations for spatial relationships
-- **Patch-Based Training**: Processes spatial neighborhoods for context
-- **Attention Mechanisms**: Geographic-aware positional encoding
-
-### Evaluation Metrics
-
-- **Climate Indices**: Rx1day, Rx5day, CDD, CWD, SDII
-- **Extreme Precipitation**: R10mm, R20mm, R95pTOT, R99pTOT
-- **Bias Metrics**: Comprehensive bias assessment with baseline comparisons
-
-## 🔧 Advanced Usage
-
-### Custom Model Training
-
-```python
-from model.model import SpatioTemporalQM
-from data.loader import DataLoaderWrapper
-
-# Initialize model
-model = SpatioTemporalQM(
-    f_in=9,                    # Input features
-    f_model=64,                # Hidden dimensions
-    heads=4,                   # Attention heads
-    degree=8,                  # Transform complexity
-    transform_type='monotone'  # Physical constraints
-)
-
-# Load data with spatial patches
-loader = DataLoaderWrapper(
-    clim='access_cm2',
-    scenario='historical',
-    ref='livneh',
-    period=[1950, 1980],
-    # ... other parameters
-)
-
-# Get spatial dataloader
-dataloader = loader.get_spatial_dataloader(K=16)  # 16 neighbors
-```
-
-### Hyperparameter Sweeps
-
-The launcher supports automatic GPU management and job distribution:
-
-```bash
-# Run sweep with dry-run mode
-python launcher.py sweep=lstm clim=access_cm2 epochs=100 dry_run=true
-
-# Full execution across available GPUs
-python launcher.py sweep=conv1d clim=['access_cm2','gfdl_esm4'] epochs=400
-```
-
-### Model Selection
-
-Automated model ranking based on climate metrics:
-
-```python
-from demo_model_selector import scan_and_rank
-
-# Evaluate all models in directory
-results = scan_and_rank(
-    root='outputs/experiment_suite',
-    val_period='1965,1978'
-)
-
-print(f"Best model: {results['best']['trial_dir']}")
-print(f"Metrics: J={results['best']['best_J']:.4f}")
-```
-
-## 📊 Performance Monitoring
-
-### TensorBoard Integration
-
-```bash
-tensorboard --logdir runs/
-```
-
-### GPU Monitoring
-
-```bash
-# Monitor GPU usage during training
-./auto_eval.sh
-
-# Check job status
-squeue -u $USER
-```
-
-## 🎯 Applications
-
-- **Climate Impact Studies**: High-resolution precipitation for hydrology
-- **Agricultural Planning**: Crop modeling with bias-corrected climate data  
-- **Water Resource Management**: Streamflow and drought analysis
-- **Urban Planning**: Infrastructure design under climate change
-
-## 🤝 Contributing
-
-Contributions are welcome! Please see our contributing guidelines:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📧 Contact
-
-- **Primary Contact**: kas7897@psu.edu
-- **Issues**: [GitHub Issues](https://github.com/kasProg/dCLIMBA-release/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/kasProg/dCLIMBA-release/discussions)
-
-
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - CMIP6 climate modeling community
-- Livneh and GridMET observational datasets
-- PyTorch and scientific Python ecosystem
-- High-performance computing resources
+- PyTorch and the scientific Python ecosystem
+- Computing resources: NERSC (Perlmutter)
 
-## 🔗 Related Work
+## Related work
 
-- [Ibicus](https://github.com/btschwertfeger/Ibicus): Climate bias adjustment toolkit
+- [ibicus](https://github.com/ecmwf-projects/ibicus): statistical bias-adjustment toolkit
 - [LOCA](https://loca.ucsd.edu/): Localized Constructed Analogs downscaling
-- [DeepSD](https://github.com/jjgomezcadenas/DeepSD): Deep learning statistical downscaling
-
----
-
-**Note**: This is a research project under active development. Please report issues and contribute to make it better for the climate science community! 🌍

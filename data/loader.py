@@ -286,18 +286,22 @@ class DataLoaderWrapper:
         dataset = TensorDataset(None, norm_input, x)
         return DataLoader(dataset, batch_size=self.batch_size, shuffle=False)
     
-    def build_autoregressive_dataset(self, norm_input, k, tv_idx=0, static_idxs=[1, 2, 3, 4]):
+    def build_autoregressive_dataset(self, norm_input, k, tv_idx=0, static_idxs=None):
         """
         norm_input: (coords, time, features)
         k: number of lags (uses past k+1 values)
         tv_idx: index of time-varying feature
-        static_idxs: indices of time-invariant features
-        
+        static_idxs: indices of time-invariant features (default: all features except tv_idx;
+                     empty when no static attributes are used)
+
         Returns:
             X: (coords, time, input_dim) -- with padded lags
         """
         coords, time, features = norm_input.shape
         device = norm_input.device
+
+        if static_idxs is None:
+            static_idxs = [i for i in range(features) if i != tv_idx]
 
         # Time-varying feature
         prcp = norm_input[:, :, tv_idx]  # (coords, time)

@@ -7,7 +7,7 @@ from torch.utils.tensorboard import SummaryWriter
 import os
 import pandas as pd
 import numpy as np
-from model.model import QuantileMappingModel, SpatioTemporalQM
+from model.model import SpatioTemporalQM
 from model.loss import rainy_day_loss, distributional_loss_interpolated, compare_distributions, rmse, kl_divergence_loss, wasserstein_distance_loss, trend_loss
 import data.process as process
 from sklearn.preprocessing import StandardScaler
@@ -91,7 +91,7 @@ input_x = {'precipitation': ['pr', 'prec', 'prcp' 'PRCP', 'precipitation']}
 clim_var = 'pr'
 ref_var = config['ref_var']
 
-input_attrs = config['input_attrs'].split(';')
+input_attrs = [a for a in config['input_attrs'].split(';') if a]
 # input_attrs = {}
 
 
@@ -129,13 +129,11 @@ logging_path = config['logging_path']
 hidden_size = config['hidden_size']
 neighbors = config['neighbors'] if 'neighbors' in config else 16
 n_harmonics = config['n_harmonics'] if 'n_harmonics' in config else 0
+spatial_attn = config.get('spatial_attn', True)
 
 
 # ny = 4 # number of params
 
-
-# crd =  [14, 15, 16, 17, 18] 
-# shape_file_filter = '/pscratch/sd/k/kas7897/us_huc/contents/WBDHU2.shp'
 
 if logging:
     exp = f'{logging_path}/{clim}-{ref}/{transform_type}_{layers}Layers_{degree}degree_quantile{emph_quantile}_scale{time_scale}/{run_id}_{train_period[0]}_{train_period[1]}_{test_period[0]}_{test_period[1]}'
@@ -187,7 +185,7 @@ if wet_dry_flag:
     nx += 1  
 
 
-model = SpatioTemporalQM(f_in=nx, f_model=hidden_size, heads=2, t_blocks=layers, st_layers=1, degree=degree, dropout=0.1, transform_type=transform_type, temp_enc=temp_enc, n_harmonics=n_harmonics).to(device)
+model = SpatioTemporalQM(f_in=nx, f_model=hidden_size, heads=2, t_blocks=layers, st_layers=1, degree=degree, dropout=0.1, transform_type=transform_type, temp_enc=temp_enc, n_harmonics=n_harmonics, spatial_attn=spatial_attn).to(device)
 
 
 model_path = f'{model_save_path}/model_{testepoch}.pth'    

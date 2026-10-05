@@ -1,2 +1,28 @@
 outputs
 processed_elev_attributes
+
+# Large data, model outputs and benchmark results -- archived on Zenodo, not in git
+processed_data/
+outputs/
+benchmark/
+runs/
+runs_revised/
+*.pt
+*.pth
+*.nc
+
+# Python bytecode/caches
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Editor-local settings
+.vscode/
+
+# Local working files
+scratch/
+*.docx
+
+# Zenodo-archive-only README (frozen snapshot doc for the data deposit,
+# not the GitHub-facing README) -- kept locally, not in this repo.
+README_2.md

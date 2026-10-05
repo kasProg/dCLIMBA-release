@@ -214,11 +214,6 @@ class UnitManager:
 
 
 
-# unit_identifier = UnitManager("/pscratch/sd/k/kas7897/Livneh/unsplit/precipitation/gfdl_esm4/prec.1950.nc")
-
-# Extracted metadata
-# print(unit_identifier.get_units())
-
 def get_season(month):
     return {
         12: "DJF", 1: "DJF", 2: "DJF",
@@ -262,7 +257,7 @@ def generate_run_id(args_dict):
     run_hash = hashlib.md5(config_str.encode()).hexdigest()[:8]  # Short, 8-char hash
     return run_hash
 
-def load_run_path(run_id, base_dir='/pscratch/sd/k/kas7897/diffDownscale/jobs/'):
+def load_run_path(run_id, base_dir='outputs'):
     # Find path for run_id
     # pattern = os.path.join(base_dir, '*','*', f'*{run_id}*')  # Wildcard to match structure
     # matching_dirs = glob.glob(pattern)

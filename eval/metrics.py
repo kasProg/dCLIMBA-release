@@ -144,7 +144,7 @@ class ClimateIndices:
             "CDD (Yearly)": (compute_cdd, None),
             "CWD (Yearly)": (compute_cwd, None),
             "R95pTOT": (compute_r95ptot, None),
-            "R99pTOT": (compute_r95ptot, None),
+            "R99pTOT": (compute_r99ptot, None),
         }
     
     def add_index(self, name, threshold, comparison=None):

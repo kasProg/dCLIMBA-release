@@ -1,11 +1,11 @@
 #!/bin/bash
 
-ROOT="/dCLIMBA"
-BASE_DIR="$ROOT/outputs/job_NAME"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" # code root directory
+BASE_DIR="${BASE_DIR:-$ROOT/outputs/Final_repeat_nowghtdecay_5b/jobs_LOCAspatioTempConv1d}"
 
 # Configuration
 VALIDATION_FLAG=""  # Set to "--validation" if needed
-TEST_PERIOD="--test_period 1970,2014"  # Adjust as needed
+TEST_PERIOD="--test_period ${TEST_PERIOD:-2001,2014}"  # Adjust as needed
 
 # Colors
 GREEN='\033[0;32m'
@@ -17,7 +17,7 @@ NC='\033[0m'
 echo "=========================================="
 echo "Running benchmarking for all runs"
 echo "Base directory: $BASE_DIR"
-echo "Test period: 2001-2014"
+echo "Test period: $TEST_PERIOD"
 echo "=========================================="
 
 total_runs=0

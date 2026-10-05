@@ -11,7 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
-from model.model import QuantileMappingModel, SpatioTemporalQM
+from model.model import SpatioTemporalQM
 from model.loss import (
     CorrelationLoss, rainy_day_loss, distributional_loss_interpolated,
     autocorrelation_loss, fourier_spectrum_loss, totalPrecipLoss,
@@ -84,6 +84,7 @@ def main(cfg: DictConfig):
 
     neighbors = cfg.neighbors
     n_harmonics = cfg.n_harmonics
+    spatial_attn = cfg.get('spatial_attn', True)
 
 
     ## For Spatial Test
@@ -100,7 +101,7 @@ def main(cfg: DictConfig):
     logging_path_address = cfg.logging_path
 
     ## INPUTS
-    input_attrs = cfg.input_attrs.split(';')
+    input_attrs = [a for a in cfg.input_attrs.split(';') if a]
 
 
 
@@ -176,7 +177,7 @@ def main(cfg: DictConfig):
     if wet_dry_flag:
         nx += 1  # Adding wet/dry flag as an additional feature
 
-    model = SpatioTemporalQM(f_in=nx, f_model=hidden_size, heads=2, t_blocks=layers, st_layers=1, degree=degree, dropout=0.1, transform_type=transform_type, temp_enc=temp_enc, n_harmonics=n_harmonics).to(device)
+    model = SpatioTemporalQM(f_in=nx, f_model=hidden_size, heads=2, t_blocks=layers, st_layers=1, degree=degree, dropout=0.1, transform_type=transform_type, temp_enc=temp_enc, n_harmonics=n_harmonics, spatial_attn=spatial_attn).to(device)
     # optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-2)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -282,9 +283,9 @@ def main(cfg: DictConfig):
             if batch_idx % 100 == 0:
                 print(f"Batch {batch_idx}/{len(dataloader)} | "
                     f"Loss: {loss.item():.4f} | "
-                    f"Quantile: {dist_loss.item():.4f} | "
-                    f"Rainy Day: {rainy_loss.item():.4f} | "
-                    f"Spatial Correlation: {spatial_corr_loss.item():.4f} | "
+                    # f"Quantile: {dist_loss.item():.4f} | "
+                    # f"Rainy Day: {rainy_loss.item():.4f} | "
+                    # f"Spatial Correlation: {spatial_corr_loss.item():.4f} | "
                     f"Fwd: {fwd_time:.3f}s | "
                     f"Bwd: {bwd_time:.3f}s | "
                     f"Total: {batch_time:.3f}s")
