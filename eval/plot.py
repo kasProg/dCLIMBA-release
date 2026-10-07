@@ -6,6 +6,81 @@ from mpl_toolkits.basemap import Basemap
 import geopandas as gpd
 from esda.moran import Moran
 from libpysal.weights import KNN
+import re
+
+# ---------------------------------------------------------------------------
+# Colour-blind-safe styling shared by every figure.
+# Colours are the Okabe-Ito palette (Okabe & Ito, 2008); line plots also get a
+# distinct linestyle + marker per series so they stay readable in greyscale.
+# ---------------------------------------------------------------------------
+OKABE_ITO = {
+    'black':      '#000000',
+    'orange':     '#E69F00',
+    'sky_blue':   '#56B4E9',
+    'green':      '#009E73',
+    'yellow':     '#F0E442',
+    'blue':       '#0072B2',
+    'vermillion': '#D55E00',
+    'purple':     '#CC79A7',
+}
+RAW_GREY = '#999999'
+REFERENCE_COLOR = OKABE_ITO['black']
+
+# One fixed style per method, so a method looks the same in every figure.
+METHOD_STYLES = {
+    'Raw':     dict(color=RAW_GREY,                linestyle=':',                    marker='x'),
+    'δCLIMBA': dict(color=OKABE_ITO['blue'],       linestyle='-',                    marker='o'),
+    'QM':      dict(color=OKABE_ITO['orange'],     linestyle='--',                   marker='s'),
+    'ISIMIP':  dict(color=OKABE_ITO['green'],      linestyle='-.',                   marker='^'),
+    'ECDFM':   dict(color=OKABE_ITO['purple'],     linestyle=(0, (3, 1, 1, 1, 1, 1)), marker='D'),
+    'QDM':     dict(color=OKABE_ITO['sky_blue'],   linestyle=(0, (8, 2)),            marker='v'),
+    'LOCA2':   dict(color=OKABE_ITO['vermillion'], linestyle=(0, (4, 1, 1, 1)),      marker='P'),
+}
+
+# Spellings used across the notebooks / ibicus kwargs -> METHOD_STYLES key.
+# A trailing "(MM)" is stripped before lookup.
+_METHOD_ALIASES = {
+    'raw': 'Raw', 'raw model': 'Raw',
+    'δclimba': 'δCLIMBA', 'dclimba': 'δCLIMBA', 'dclimbad': 'δCLIMBA',
+    'qm': 'QM', 'quantile mapping': 'QM', 'quantilemapping': 'QM',
+    'isimip': 'ISIMIP', 'isimp': 'ISIMIP',
+    'ecdfm': 'ECDFM',
+    'qdm': 'QDM', 'quantile delta mapping': 'QDM', 'quantiledeltamapping': 'QDM',
+    'loca': 'LOCA2', 'loca2': 'LOCA2',
+}
+
+# Styles for series that are not bias-correction methods (GCMs, ablation variants).
+# Blue (δCLIMBA's colour) is last so short lists drawn next to δCLIMBA avoid it.
+SERIES_STYLES = [
+    dict(color=OKABE_ITO['orange'],     linestyle='--',                   marker='o'),
+    dict(color=OKABE_ITO['green'],      linestyle='-.',                   marker='s'),
+    dict(color=OKABE_ITO['purple'],     linestyle=(0, (8, 2)),            marker='^'),
+    dict(color=OKABE_ITO['sky_blue'],   linestyle=(0, (3, 1, 1, 1, 1, 1)), marker='D'),
+    dict(color=OKABE_ITO['vermillion'], linestyle=(0, (4, 1, 1, 1)),      marker='v'),
+    dict(color=OKABE_ITO['blue'],       linestyle=(0, (1, 1)),            marker='P'),
+]
+
+
+def method_key(name):
+    """Canonical METHOD_STYLES key for a method label, or None if unknown."""
+    norm = re.sub(r'\(\s*MM\s*\)', '', str(name)).strip().lower()
+    return _METHOD_ALIASES.get(norm)
+
+
+def method_style(name, fallback_index=0):
+    """Style dict (color, linestyle, marker) for a method label.
+
+    Unknown labels fall back to SERIES_STYLES[fallback_index]."""
+    key = method_key(name)
+    if key is not None:
+        return dict(METHOD_STYLES[key])
+    return dict(SERIES_STYLES[fallback_index % len(SERIES_STYLES)])
+
+
+def method_palette(names):
+    """{label: colour} for seaborn `palette=`, consistent with METHOD_STYLES."""
+    return {n: method_style(n, i)['color'] for i, n in enumerate(names)}
+
 
 def plot_violin_bias(ax, bias_data, bias_label, title, method_names=None, remove_outlier=False, xlabel = 'Precipitation Index'):
     """
@@ -64,20 +139,10 @@ def plot_violin_bias(ax, bias_data, bias_label, title, method_names=None, remove
     if remove_outlier:
         df_bias = df_bias[(df_bias[bias_label] < 100) & (df_bias[bias_label] > -100)]
 
-    # Define colors: Raw = Blue, Corrected Methods = Different Colors
-    # Define consistent color mapping: Assign colors dynamically
+    # Colour-blind-safe colours, fixed per method (see METHOD_STYLES)
     unique_methods = ["Raw"] + (method_names if method_names else [f"Method {i+1}" for i in range(len(df_bias["Method"].unique()) - 1)])
-    color_palette = sns.color_palette("husl", len(unique_methods))
+    color_mapping = method_palette(unique_methods)
 
-    # Map method names to colors
-    color_mapping = {method: color_palette[i] for i, method in enumerate(unique_methods)}
-
-    # Apply colors in orderx
-    palette = [color_mapping[method] for method in df_bias["Method"].unique()]
-    # unique_types = df_bias["Type"].unique()
-    # palette = ["C0" if "Raw" in x else f"C{i+1}" for i, x in enumerate(unique_types)]
-
-    # sns.violinplot(x="Type", y=bias_label, data=df_bias, inner="point", cut=0, palette=palette, ax=ax)
     sns.violinplot(x="Category", y=bias_label, hue="Method", data=df_bias, inner="point", cut=0, palette=color_mapping, ax=ax)
     
      # Draw zero line
